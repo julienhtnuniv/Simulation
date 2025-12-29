@@ -105,15 +105,42 @@ body{
         localStorage.getItem("n8n_session"));
 
   function add(text, who){
-    const d = document.createElement("div");
-    d.className = "msg " + who;
-    d.innerHTML = text
-  .replace(/(https?:\/\/[^\s]+)/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
-  .replace(/\n/g, "<br>");
-    msgs.appendChild(d);
-    msgs.scrollTop = msgs.scrollHeight;
+  const d = document.createElement("div");
+  d.className = "msg " + who;
+
+  // Détection d'une URL
+  const urlMatch = text.match(/https?:\/\/[^\s]+/);
+
+  if (urlMatch && who === "bot") {
+    const url = urlMatch[0];
+
+    // Texte avant / après l’URL
+    const label = text.replace(url, "").trim();
+
+    d.innerHTML = `
+      ${label ? `<div style="margin-bottom:6px">${label}</div>` : ""}
+      <a href="${url}" target="_blank" rel="noopener noreferrer"
+         style="
+           display:inline-block;
+           padding:8px 14px;
+           background:#0d6efd;
+           color:#fff;
+           border-radius:8px;
+           text-decoration:none;
+           font-size:14px;
+           font-weight:500;
+         ">
+        📄 Télécharger le PDF
+      </a>
+    `;
+  } else {
+    // Message normal (sans bouton)
+    d.textContent = text;
   }
+
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+}
 
   function extractReply(data){
     // Format n8n actuel : [ { output: "..." } ]
