@@ -13,39 +13,28 @@
   --border:#e0e0e0;
 }
 *{box-sizing:border-box}
-html, body{
-  height:100%;
-}
+
+html, body{ height:100%; }
 
 body{
   margin:0;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   background:var(--bg);
-  overflow:hidden; /* important pour éviter un “fond” en dessous dans l’iframe */
+  overflow:hidden; /* évite le “fond” en dessous dans l’iframe */
 }
 
 #chat{
   display:flex;
   flex-direction:column;
-  height:100%;   /* 👈 prend exactement la hauteur de l'iframe */
+  height:100%; /* prend exactement la hauteur de l'iframe */
 }
-#header{
-  padding:10px 14px;
-  background:#fff;
-  border-bottom:1px solid var(--border);
-  font-weight:600;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
+
+#messages{
+  flex:1;
+  padding:12px;
+  overflow-y:auto;
 }
-#badge{
-  font-size:12px;
-  opacity:.7;
-  font-weight:500;
-  white-space:nowrap;
-}
-#messages{flex:1;padding:12px;overflow-y:auto}
+
 .msg{
   max-width:85%;
   padding:8px 12px;
@@ -56,9 +45,12 @@ body{
   white-space:pre-wrap;
   word-wrap:break-word;
 }
-.bot{background:var(--bubble);border:1px solid var(--border)}
+
+.bot{background:var(--bubble);border:1px solid var(--border);color:#000}
 .user{background:var(--primary);color:#fff;margin-left:auto}
+
 #typing{font-size:12px;opacity:.6;padding:0 12px 6px;display:none}
+
 #form{
   display:flex;
   padding:8px;
@@ -66,6 +58,7 @@ body{
   background:#fff;
   gap:6px;
 }
+
 #input{
   flex:1;
   padding:8px 10px;
@@ -74,10 +67,12 @@ body{
   border:1px solid var(--border);
   outline:none;
 }
+
 #input:focus{
   border-color:#b9d1ff;
-  box-shadow:0 0 0 3px rgba(13,110,253,.12);
+  box-shadow:0 0 0 3px rgba(77,69,147,.12);
 }
+
 #send{
   padding:8px 14px;
   border:none;
@@ -86,8 +81,11 @@ body{
   color:#fff;
   cursor:pointer;
 }
+
 #send:disabled{opacity:.6;cursor:not-allowed}
+
 .small{font-size:12px;opacity:.7;padding:0 12px 10px}
+
 .btnlink{
   display:inline-block;
   padding:8px 14px;
@@ -103,10 +101,9 @@ body{
 
 <body>
 <div id="chat">
- 
 
   <div id="messages">
-    <div class="msg bot">Bonjour 👋 </div>
+    <div class="msg bot">Bonjour 👋</div>
   </div>
 
   <div id="typing">⏳ Le patient réfléchit...</div>
@@ -120,6 +117,7 @@ body{
 
 <script>
 (function(){
+  // ⚠️ Remets ici TON webhook valide (dans ton historique c'était ...26199)
   const WEBHOOK = "https://sisofficine.app.n8n.cloud/webhook/200ac8f9-bce6-449b-be38-7eca5bd26198";
 
   const msgs   = document.getElementById("messages");
@@ -127,120 +125,8 @@ body{
   const input  = document.getElementById("input");
   const send   = document.getElementById("send");
   const typing = document.getElementById("typing");
-  const badge  = document.getElementById("badge");
 
-  // --- Params (provenant de l'iframe Moodle) ---
+  // Params venant de l'iframe Moodle
   const params = new URLSearchParams(location.search);
   const context   = params.get("context") || "default";
-  const firstname = params.get("firstname") || "{firstname}";
-  const lastname  = params.get("lastname")  || "{lastname}";
-
-  // --- Session isolée par contexte (évite de mélanger entre cours/activités) ---
-  const storageKey = "n8n_session_" + context;
-  const sessionId =
-    localStorage.getItem(storageKey)
-    || (localStorage.setItem(
-          storageKey,
-          "sess_" + Date.now() + "_" + Math.random().toString(16).slice(2)
-        ),
-        localStorage.getItem(storageKey));
-
-  badge.textContent = "Contexte" + context;
-
-  function escapeHtml(s){
-    return String(s)
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;")
-      .replace(/'/g,"&#39;");
-  }
-  function escapeAttr(s){
-    return String(s).replace(/"/g,"&quot;");
-  }
-
-  // Affichage: si le bot renvoie une URL, on transforme en bouton "Télécharger"
-  function add(text, who){
-    const d = document.createElement("div");
-    d.className = "msg " + who;
-
-    const urlMatch = (text || "").match(/https?:\/\/[^\s]+/);
-
-    if (who === "bot" && urlMatch) {
-      const url = urlMatch[0];
-      const label = (text || "").replace(url, "").trim();
-
-      d.innerHTML = `
-        ${label ? `<div style="margin-bottom:6px">${escapeHtml(label).replace(/\n/g,"<br>")}</div>` : ""}
-        <a class="btnlink" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">
-          📄 Télécharger
-        </a>
-      `;
-    } else {
-      d.textContent = text;
-    }
-
-    msgs.appendChild(d);
-    msgs.scrollTop = msgs.scrollHeight;
-  }
-
-  // Extraction de la réponse n8n (gère: [ {output} ], {output}, {reply}, etc.)
-  function extractReply(data){
-    if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
-      return data[0].output || data[0].reply || data[0].text || data[0].answer || data[0].message || "";
-    }
-    if (data && typeof data === "object") {
-      return data.output || data.reply || data.text || data.answer || data.message || "";
-    }
-    if (typeof data === "string") return data;
-    return "";
-  }
-
-  form.addEventListener("submit", async (e)=>{
-    e.preventDefault();
-    const q = (input.value || "").trim();
-    if(!q) return;
-
-    add(q, "user");
-    input.value = "";
-
-    send.disabled = true;
-    typing.style.display = "block";
-    badge.textContent = "Envoi…";
-
-    try{
-      const res = await fetch(WEBHOOK, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: q,
-          sessionId,
-          context,
-          firstname,
-          lastname,
-          source: "moodle-iframe",
-          pageUrl: location.href
-        })
-      });
-
-      // Si ton webhook ne renvoie pas du JSON, tu peux remplacer par res.text()
-      const data = await res.json();
-      const reply = extractReply(data);
-
-      add(reply || "Aucune réponse reçue.", "bot");
-      badge.textContent = "Prêt";
-    } catch(err){
-      console.error(err);
-      add("❌ Erreur de connexion au serveur.", "bot");
-      badge.textContent = "Erreur";
-    } finally {
-      typing.style.display = "none";
-      send.disabled = false;
-      input.focus();
-    }
-  });
-
-})();
-</script>
-</body>
-</html>
+  const firstname =
