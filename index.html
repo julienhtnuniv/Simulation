@@ -107,7 +107,10 @@ body{
   function add(text, who){
     const d = document.createElement("div");
     d.className = "msg " + who;
-    d.textContent = text;
+    d.innerHTML = text
+  .replace(/(https?:\/\/[^\s]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+  .replace(/\n/g, "<br>");
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
   }
