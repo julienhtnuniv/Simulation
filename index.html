@@ -13,20 +13,19 @@
   --border:#e0e0e0;
 }
 *{box-sizing:border-box}
-
 html, body{ height:100%; }
 
 body{
   margin:0;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   background:var(--bg);
-  overflow:hidden; /* évite le “fond” en dessous dans l’iframe */
+  overflow:hidden;
 }
 
 #chat{
   display:flex;
   flex-direction:column;
-  height:100%; /* prend exactement la hauteur de l'iframe */
+  height:100%;
 }
 
 #messages{
@@ -50,6 +49,16 @@ body{
 .user{background:var(--primary);color:#fff;margin-left:auto}
 
 #typing{font-size:12px;opacity:.6;padding:0 12px 6px;display:none}
+
+#meta{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding:0 12px 10px;
+}
+.small{font-size:12px;opacity:.7}
+#status{font-size:12px;opacity:.8}
 
 #form{
   display:flex;
@@ -81,10 +90,7 @@ body{
   color:#fff;
   cursor:pointer;
 }
-
 #send:disabled{opacity:.6;cursor:not-allowed}
-
-.small{font-size:12px;opacity:.7;padding:0 12px 10px}
 
 .btnlink{
   display:inline-block;
@@ -101,13 +107,16 @@ body{
 
 <body>
 <div id="chat">
-
   <div id="messages">
     <div class="msg bot">Bonjour 👋</div>
   </div>
 
   <div id="typing">⏳ Le patient réfléchit...</div>
-  <div class="small">(Patient créé par IA)</div>
+
+  <div id="meta">
+    <div class="small">(Patient créé par IA)</div>
+    <div id="status">JS…</div>
+  </div>
 
   <form id="form">
     <input id="input" placeholder="Parler au patient..." autocomplete="off" />
@@ -116,8 +125,8 @@ body{
 </div>
 
 <script>
-(function(){
-  // ⚠️ Remets ici TON webhook valide (dans ton historique c'était ...26199)
+window.addEventListener("DOMContentLoaded", () => {
+  // ✅ Mets ici ton webhook exact (vérifie bien l'ID)
   const WEBHOOK = "https://sisofficine.app.n8n.cloud/webhook/200ac8f9-bce6-449b-be38-7eca5bd26198";
 
   const msgs   = document.getElementById("messages");
@@ -125,8 +134,131 @@ body{
   const input  = document.getElementById("input");
   const send   = document.getElementById("send");
   const typing = document.getElementById("typing");
+  const status = document.getElementById("status");
 
-  // Params venant de l'iframe Moodle
+  function setStatus(t){ status.textContent = t; }
+
+  // Sécurité : si un élément manque, on l'affiche
+  if (!msgs || !form || !input || !send || !typing || !status) {
+    console.error("Missing DOM nodes", {msgs, form, input, send, typing, status});
+    alert("Chat: éléments DOM manquants (HTML incomplet).");
+    return;
+  }
+
   const params = new URLSearchParams(location.search);
   const context   = params.get("context") || "default";
-  const firstname =
+  const firstname = params.get("firstname") || "{firstname}";
+  const lastname  = params.get("lastname")  || "{lastname}";
+
+  const storageKey = "n8n_session_" + context;
+  const sessionId =
+    localStorage.getItem(storageKey)
+    || (localStorage.setItem(
+          storageKey,
+          "sess_" + Date.now() + "_" + Math.random().toString(16).slice(2)
+        ),
+        localStorage.getItem(storageKey));
+
+  function escapeHtml(s){
+    return String(s)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+  function escapeAttr(s){
+    return String(s).replace(/"/g,"&quot;");
+  }
+
+  function add(text, who){
+    const d = document.createElement("div");
+    d.className = "msg " + who;
+
+    const urlMatch = (text || "").match(/https?:\/\/[^\s]+/);
+
+    if (who === "bot" && urlMatch) {
+      const url = urlMatch[0];
+      const label = (text || "").replace(url, "").trim();
+      d.innerHTML = `
+        ${label ? `<div style="margin-bottom:6px">${escapeHtml(label).replace(/\n/g,"<br>")}</div>` : ""}
+        <a class="btnlink" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">📄 Télécharger</a>
+      `;
+    } else {
+      d.textContent = text;
+    }
+
+    msgs.appendChild(d);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function extractReply(data){
+    if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
+      return data[0].output || data[0].reply || data[0].text || data[0].answer || data[0].message || "";
+    }
+    if (data && typeof data === "object") {
+      return data.output || data.reply || data.text || data.answer || data.message || "";
+    }
+    if (typeof data === "string") return data;
+    return "";
+  }
+
+  setStatus("JS OK ✅");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const q = (input.value || "").trim();
+    if (!q) return;
+
+    // ✅ si tu vois ça, c’est que le JS marche et que l’ajout message fonctionne
+    add(q, "user");
+    input.value = "";
+
+    send.disabled = true;
+    typing.style.display = "block";
+    setStatus("Envoi…");
+
+    try{
+      const payload = {
+        message: q,
+        sessionId,
+        context,
+        firstname,
+        lastname,
+        source: "moodle-iframe",
+        pageUrl: location.href
+      };
+
+      const res = await fetch(WEBHOOK, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      // si n8n renvoie une erreur, on l’affiche
+      if (!res.ok) {
+        const t = await res.text().catch(()=> "");
+        add("❌ Erreur n8n HTTP " + res.status + (t ? ("\n" + t) : ""), "bot");
+        setStatus("Erreur HTTP");
+        return;
+      }
+
+      const data = await res.json();
+      const reply = extractReply(data);
+      add(reply || "Aucune réponse reçue.", "bot");
+      setStatus("OK ✅");
+    } catch(err){
+      console.error(err);
+      add("❌ Erreur de connexion au serveur.", "bot");
+      setStatus("Erreur réseau");
+    } finally {
+      typing.style.display = "none";
+      send.disabled = false;
+      input.focus();
+    }
+  });
+});
+</script>
+</body>
+</html>
