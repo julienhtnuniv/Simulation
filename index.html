@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chatbot pédagogique</title>
+
+<style>
+:root{
+  --primary:#0d6efd;
+  --bg:#fafafa;
+  --bubble:#ffffff;
+  --border:#e0e0e0;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:var(--bg);
+}
+#chat{
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
+#header{
+  padding:10px 14px;
+  background:#fff;
+  border-bottom:1px solid var(--border);
+  font-weight:600;
+}
+#messages{
+  flex:1;
+  padding:12px;
+  overflow-y:auto;
+}
+.msg{
+  max-width:80%;
+  padding:8px 12px;
+  border-radius:12px;
+  margin-bottom:8px;
+  line-height:1.25;
+  font-size:14px;
+}
+.bot{
+  background:var(--bubble);
+  border:1px solid var(--border);
+}
+.user{
+  background:var(--primary);
+  color:#fff;
+  margin-left:auto;
+}
+#typing{
+  font-size:12px;
+  opacity:.6;
+  padding:0 12px 6px;
+  display:none;
+}
+#form{
+  display:flex;
+  padding:8px;
+  border-top:1px solid var(--border);
+  background:#fff;
+}
+#input{
+  flex:1;
+  padding:8px;
+  font-size:14px;
+  border-radius:8px;
+  border:1px solid var(--border);
+}
+#send{
+  margin-left:6px;
+  padding:8px 14px;
+  border:none;
+  border-radius:8px;
+  background:var(--primary);
+  color:#fff;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+<div id="chat">
+  <div id="header">🤖 Assistant pédagogique</div>
+
+  <div id="messages">
+    <div class="msg bot">Bonjour 👋 Pose ta question.</div>
+  </div>
+
+  <div id="typing">⏳ L’assistant réfléchit…</div>
+
+  <form id="form">
+    <input id="input" placeholder="Écris ton message…" autocomplete="off" />
+    <button id="send">Envoyer</button>
+  </form>
+</div>
+
+<script>
+const WEBHOOK = "https://sisofficine.app.n8n.cloud/webhook/200ac8f9-bce6-449b-be38-7eca5bd26199";
+
+const msgs = document.getElementById("messages");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const typing = document.getElementById("typing");
+
+// session persistante
+const sessionId = localStorage.n8n_session
+  || (localStorage.n8n_session = "sess_" + Date.now());
+
+function add(text, who){
+  const d = document.createElement("div");
+  d.className = "msg " + who;
+  d.textContent = text;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+form.onsubmit = async (e)=>{
+  e.preventDefault();
+  const q = input.value.trim();
+  if(!q) return;
+
+  add(q,"user");
+  input.value = "";
+  typing.style.display = "block";
+
+  try{
+    const r = await fetch(WEBHOOK,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        message:q,
+        sessionId:sessionId,
+        source:"moodle-iframe",
+        referrer: document.referrer
+      })
+    });
+
+    const j = await r.json().catch(()=>({reply:"Erreur serveur"}));
+    add(j.reply || j.text || j.answer || "Pas de réponse","bot");
+  }catch(err){
+    add("❌ Erreur de connexion au serveur","bot");
+  }finally{
+    typing.style.display = "none";
+  }
+};
+</script>
+</body>
+</html>
