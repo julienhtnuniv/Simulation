@@ -13,17 +13,15 @@
   --border:#e0e0e0;
 }
 *{box-sizing:border-box}
-body{
-  margin:0;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-  background:var(--bg);
-}
 html, body{
   height:100%;
 }
 
 body{
   margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:var(--bg);
+  overflow:hidden; /* important pour éviter un “fond” en dessous dans l’iframe */
 }
 
 #chat{
