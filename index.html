@@ -18,7 +18,11 @@ body{
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   background:var(--bg);
 }
-#chat{display:flex;flex-direction:column;height:100vh}
+#chat{
+  display:flex;
+  flex-direction:column;
+  height:320px;          /* 👈 même hauteur que l’image */
+}
 #header{
   padding:10px 14px;
   background:#fff;
@@ -138,7 +142,7 @@ body{
         ),
         localStorage.getItem(storageKey));
 
-  badge.textContent = "ctx: " + context;
+  badge.textContent = "Contexte" + context;
 
   function escapeHtml(s){
     return String(s)
