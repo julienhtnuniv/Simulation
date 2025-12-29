@@ -73,24 +73,24 @@ body{
 
 <body>
 <div id="chat">
-  <div id="header">🤒 Premier Patient</div>
+  <div id="header">🤖 Assistant pédagogique</div>
 
   <div id="messages">
-    <div class="msg bot">Bonjour 👋 </div>
+    <div class="msg bot">Bonjour 👋 Pose ta question.</div>
   </div>
 
-  <div id="typing">⏳ Le patient réfléchit...</div>
-  <div class="small">Patient virtuel IA</div>
+  <div id="typing">⏳ L’assistant répond…</div>
+  <div class="small">Propulsé par n8n</div>
 
   <form id="form">
-    <input id="input" placeholder="Parler au patient..." autocomplete="off" />
+    <input id="input" placeholder="Écris ton message…" autocomplete="off" />
     <button id="send" type="submit">Envoyer</button>
   </form>
 </div>
 
 <script>
 (function(){
-  const WEBHOOK = "https://sisofficine.app.n8n.cloud/webhook/200ac8f9-bce6-449b-be38-7eca5bd26198";
+  const WEBHOOK = "https://sisofficine.app.n8n.cloud/webhook/200ac8f9-bce6-449b-be38-7eca5bd26199";
 
   const msgs   = document.getElementById("messages");
   const form   = document.getElementById("form");
@@ -104,55 +104,71 @@ body{
     || (localStorage.setItem("n8n_session", "sess_" + Date.now()),
         localStorage.getItem("n8n_session"));
 
+  // ✅ Récupération des balises depuis l'URL : ?firstname=...&lastname=...
+  const params = new URLSearchParams(location.search);
+
+  // Si non fourni, on laisse null (et tu gères côté n8n)
+  const firstname = params.get("firstname");
+  const lastname  = params.get("lastname");
+
   function add(text, who){
-  const d = document.createElement("div");
-  d.className = "msg " + who;
+    const d = document.createElement("div");
+    d.className = "msg " + who;
 
-  // Détection d'une URL
-  const urlMatch = text.match(/https?:\/\/[^\s]+/);
+    // ✅ Bouton Télécharger si une URL est présente dans un message bot
+    const urlMatch = text.match(/https?:\/\/[^\s]+/);
 
-  if (urlMatch && who === "bot") {
-    const url = urlMatch[0];
+    if (urlMatch && who === "bot") {
+      const url = urlMatch[0];
+      const label = text.replace(url, "").trim();
 
-    // Texte avant / après l’URL
-    const label = text.replace(url, "").trim();
+      d.innerHTML = `
+        ${label ? `<div style="margin-bottom:6px">${escapeHtml(label).replace(/\n/g,"<br>")}</div>` : ""}
+        <a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer"
+           style="
+             display:inline-block;
+             padding:8px 14px;
+             background:#0d6efd;
+             color:#fff;
+             border-radius:8px;
+             text-decoration:none;
+             font-size:14px;
+             font-weight:500;
+           ">
+          📄 Télécharger le PDF
+        </a>
+      `;
+    } else {
+      d.textContent = text;
+    }
 
-    d.innerHTML = `
-      ${label ? `<div style="margin-bottom:6px">${label}</div>` : ""}
-      <a href="${url}" target="_blank" rel="noopener noreferrer"
-         style="
-           display:inline-block;
-           padding:8px 14px;
-           background:#0d6efd;
-           color:#fff;
-           border-radius:8px;
-           text-decoration:none;
-           font-size:14px;
-           font-weight:500;
-         ">
-        📄 Télécharger le PDF
-      </a>
-    `;
-  } else {
-    // Message normal (sans bouton)
-    d.textContent = text;
+    msgs.appendChild(d);
+    msgs.scrollTop = msgs.scrollHeight;
   }
 
-  msgs.appendChild(d);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
   function extractReply(data){
-    // Format n8n actuel : [ { output: "..." } ]
+    // Format n8n courant : [ { output: "..." } ]
     if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
       return data[0].output || data[0].reply || data[0].text || "";
     }
-    // Fallbacks simples
     if (data && typeof data === "object") {
       return data.output || data.reply || data.text || "";
     }
     if (typeof data === "string") return data;
     return "";
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+  function escapeAttr(s){
+    // suffisant ici (on échappe au minimum ce qui casse les attributs)
+    return String(s).replace(/"/g,"&quot;");
   }
 
   form.addEventListener("submit", async (e)=>{
@@ -172,6 +188,9 @@ body{
         body: JSON.stringify({
           message: q,
           sessionId,
+          // ✅ envoyées à n8n
+          firstname,
+          lastname,
           source: "moodle-iframe",
           pageUrl: location.href
         })
