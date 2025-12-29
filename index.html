@@ -20,51 +20,70 @@ body{
 }
 #chat{display:flex;flex-direction:column;height:100vh}
 #header{
-  padding:10px 14px;background:#fff;border-bottom:1px solid var(--border);
-  font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:10px
+  padding:10px 14px;
+  background:#fff;
+  border-bottom:1px solid var(--border);
+  font-weight:600;
 }
-#status{font-size:12px;opacity:.65;font-weight:500;white-space:nowrap}
 #messages{flex:1;padding:12px;overflow-y:auto}
 .msg{
-  max-width:85%;padding:8px 12px;border-radius:12px;margin-bottom:8px;
-  line-height:1.25;font-size:14px;white-space:pre-wrap;word-wrap:break-word
+  max-width:85%;
+  padding:8px 12px;
+  border-radius:12px;
+  margin-bottom:8px;
+  line-height:1.25;
+  font-size:14px;
+  white-space:pre-wrap;
+  word-wrap:break-word;
 }
 .bot{background:var(--bubble);border:1px solid var(--border)}
 .user{background:var(--primary);color:#fff;margin-left:auto}
 #typing{font-size:12px;opacity:.6;padding:0 12px 6px;display:none}
 #form{
-  display:flex;padding:8px;border-top:1px solid var(--border);background:#fff;gap:6px
+  display:flex;
+  padding:8px;
+  border-top:1px solid var(--border);
+  background:#fff;
+  gap:6px;
 }
 #input{
-  flex:1;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);outline:none
+  flex:1;
+  padding:8px 10px;
+  font-size:14px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  outline:none;
 }
-#input:focus{border-color:#b9d1ff;box-shadow:0 0 0 3px rgba(13,110,253,.12)}
+#input:focus{
+  border-color:#b9d1ff;
+  box-shadow:0 0 0 3px rgba(13,110,253,.12);
+}
 #send{
-  padding:8px 14px;border:none;border-radius:8px;background:var(--primary);color:#fff;cursor:pointer
+  padding:8px 14px;
+  border:none;
+  border-radius:8px;
+  background:var(--primary);
+  color:#fff;
+  cursor:pointer;
 }
 #send:disabled{opacity:.6;cursor:not-allowed}
 .small{font-size:12px;opacity:.7;padding:0 12px 10px}
-hr.sep{border:0;border-top:1px dashed rgba(0,0,0,.12);margin:10px 0}
-code.k{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px}
 </style>
 </head>
 
 <body>
 <div id="chat">
-  <div id="header">
-    <div>🤖 Assistant pédagogique</div>
-    <div id="status">Prêt</div>
-  </div>
+  <div id="header">🤒 Premier Patient</div>
 
   <div id="messages">
-    <div class="msg bot">Bonjour 👋 Pose ta question.</div>
+    <div class="msg bot">Bonjour 👋 </div>
   </div>
 
-  <div id="typing">⏳ L’assistant répond…</div>
-  <div class="small">Propulsé par n8n</div>
+  <div id="typing">⏳ Le patient réfléchit...</div>
+  <div class="small">Patient virtuel IA</div>
 
   <form id="form">
-    <input id="input" placeholder="Écris ton message…" autocomplete="off" />
+    <input id="input" placeholder="Parler au patient..." autocomplete="off" />
     <button id="send" type="submit">Envoyer</button>
   </form>
 </div>
@@ -78,13 +97,12 @@ code.k{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;f
   const input  = document.getElementById("input");
   const send   = document.getElementById("send");
   const typing = document.getElementById("typing");
-  const status = document.getElementById("status");
 
+  // Session persistante (mémoire côté n8n)
   const sessionId =
     localStorage.getItem("n8n_session")
-    || (localStorage.setItem("n8n_session", "sess_" + Date.now()), localStorage.getItem("n8n_session"));
-
-  function setStatus(t){ status.textContent = t; }
+    || (localStorage.setItem("n8n_session", "sess_" + Date.now()),
+        localStorage.getItem("n8n_session"));
 
   function add(text, who){
     const d = document.createElement("div");
@@ -94,137 +112,54 @@ code.k{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;f
     msgs.scrollTop = msgs.scrollHeight;
   }
 
-  // Cherche une "réponse" dans n'importe quelle structure JSON (très robuste)
-  function findFirstReply(data){
-    const keysPriority = [
-      "reply","response","output","text","answer","message","content"
-    ];
-
-    const seen = new Set();
-
-    function walk(x){
-      if (x === null || x === undefined) return null;
-
-      // string directe
-      if (typeof x === "string") {
-        const s = x.trim();
-        return s ? s : null;
-      }
-
-      // nombre/bool -> string
-      if (typeof x === "number" || typeof x === "boolean") return String(x);
-
-      // anti-boucle
-      if (typeof x === "object") {
-        if (seen.has(x)) return null;
-        seen.add(x);
-      }
-
-      // tableau
-      if (Array.isArray(x)) {
-        for (const item of x) {
-          const r = walk(item);
-          if (r) return r;
-        }
-        return null;
-      }
-
-      // objet
-      if (typeof x === "object") {
-        // 1) on teste d'abord les clés prioritaires
-        for (const k of keysPriority) {
-          if (k in x) {
-            const r = walk(x[k]);
-            if (r) return r;
-          }
-        }
-        // 2) puis toutes les autres clés
-        for (const k of Object.keys(x)) {
-          const r = walk(x[k]);
-          if (r) return r;
-        }
-      }
-
-      return null;
+  function extractReply(data){
+    // Format n8n actuel : [ { output: "..." } ]
+    if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
+      return data[0].output || data[0].reply || data[0].text || "";
     }
-
-    return walk(data);
+    // Fallbacks simples
+    if (data && typeof data === "object") {
+      return data.output || data.reply || data.text || "";
+    }
+    if (typeof data === "string") return data;
+    return "";
   }
 
-  async function readResponse(res){
-    const ct = (res.headers.get("content-type") || "").toLowerCase();
-    let rawText = "";
-    let data = null;
-
-    // On lit toujours le texte brut (utile si JSON foire)
-    rawText = await res.text();
-
-    // Tentative JSON
-    if (ct.includes("application/json") || rawText.trim().startsWith("{") || rawText.trim().startsWith("[")) {
-      try { data = JSON.parse(rawText); } catch { data = null; }
-    }
-
-    return { rawText, data };
-  }
-
-  form.addEventListener("submit", async (e) => {
+  form.addEventListener("submit", async (e)=>{
     e.preventDefault();
     const q = (input.value || "").trim();
     if(!q) return;
 
     add(q, "user");
     input.value = "";
-
     send.disabled = true;
     typing.style.display = "block";
-    setStatus("Envoi…");
 
     try{
       const res = await fetch(WEBHOOK, {
         method: "POST",
-        mode: "cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: q,
           sessionId,
-          source: "github-pages",
-          referrer: document.referrer || "",
+          source: "moodle-iframe",
           pageUrl: location.href
         })
       });
 
-      setStatus(`HTTP ${res.status}`);
+      const data = await res.json();
+      const reply = extractReply(data);
 
-      const { rawText, data } = await readResponse(res);
-
-      // Si HTTP pas OK, on affiche le body brut
-      if (!res.ok) {
-        add(`❌ Erreur HTTP ${res.status}\n\n${rawText || "(body vide)"}`, "bot");
-        return;
-      }
-
-      const reply = data ? findFirstReply(data) : (rawText || "").trim();
-
-      if (reply) {
-        add(reply, "bot");
-      } else {
-        // Fallback DEBUG : on te montre exactement ce qui arrive dans le navigateur
-        const dbg = data ? JSON.stringify(data, null, 2) : rawText;
-        add("⚠️ Réponse reçue mais non reconnue.\nVoici le contenu brut :\n\n" + dbg, "bot");
-      }
-
+      add(reply || "Aucune réponse reçue.", "bot");
     } catch(err){
-      setStatus("Erreur");
-      add("❌ Erreur de connexion (CORS / réseau). Regarde la console du navigateur.", "bot");
+      add("❌ Erreur de connexion au serveur.", "bot");
       console.error(err);
     } finally {
       typing.style.display = "none";
       send.disabled = false;
       input.focus();
-      setStatus("Prêt");
     }
   });
-
 })();
 </script>
 </body>
