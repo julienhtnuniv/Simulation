@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Chatbot pédagogique</title>
+<title>Chatbot Moodle → n8n</title>
 
 <style>
 :root{
@@ -24,6 +24,16 @@ body{
   background:#fff;
   border-bottom:1px solid var(--border);
   font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+#badge{
+  font-size:12px;
+  opacity:.7;
+  font-weight:500;
+  white-space:nowrap;
 }
 #messages{flex:1;padding:12px;overflow-y:auto}
 .msg{
@@ -68,12 +78,25 @@ body{
 }
 #send:disabled{opacity:.6;cursor:not-allowed}
 .small{font-size:12px;opacity:.7;padding:0 12px 10px}
+.btnlink{
+  display:inline-block;
+  padding:8px 14px;
+  background:var(--primary);
+  color:#fff;
+  border-radius:8px;
+  text-decoration:none;
+  font-size:14px;
+  font-weight:500;
+}
 </style>
 </head>
 
 <body>
 <div id="chat">
-  <div id="header">🤖 Assistant pédagogique</div>
+  <div id="header">
+    <div>🤖 Assistant</div>
+    <div id="badge">Prêt</div>
+  </div>
 
   <div id="messages">
     <div class="msg bot">Bonjour 👋 Pose ta question.</div>
@@ -97,66 +120,25 @@ body{
   const input  = document.getElementById("input");
   const send   = document.getElementById("send");
   const typing = document.getElementById("typing");
+  const badge  = document.getElementById("badge");
 
-  // Session persistante (mémoire côté n8n)
-  const sessionId =
-    localStorage.getItem("n8n_session")
-    || (localStorage.setItem("n8n_session", "sess_" + Date.now()),
-        localStorage.getItem("n8n_session"));
-
-  // ✅ Récupération des balises depuis l'URL : ?firstname=...&lastname=...
+  // --- Params (provenant de l'iframe Moodle) ---
   const params = new URLSearchParams(location.search);
+  const context   = params.get("context") || "default";
+  const firstname = params.get("firstname") || "{firstname}";
+  const lastname  = params.get("lastname")  || "{lastname}";
 
-  // Si non fourni, on laisse null (et tu gères côté n8n)
-  const firstname = params.get("firstname");
-  const lastname  = params.get("lastname");
+  // --- Session isolée par contexte (évite de mélanger entre cours/activités) ---
+  const storageKey = "n8n_session_" + context;
+  const sessionId =
+    localStorage.getItem(storageKey)
+    || (localStorage.setItem(
+          storageKey,
+          "sess_" + Date.now() + "_" + Math.random().toString(16).slice(2)
+        ),
+        localStorage.getItem(storageKey));
 
-  function add(text, who){
-    const d = document.createElement("div");
-    d.className = "msg " + who;
-
-    // ✅ Bouton Télécharger si une URL est présente dans un message bot
-    const urlMatch = text.match(/https?:\/\/[^\s]+/);
-
-    if (urlMatch && who === "bot") {
-      const url = urlMatch[0];
-      const label = text.replace(url, "").trim();
-
-      d.innerHTML = `
-        ${label ? `<div style="margin-bottom:6px">${escapeHtml(label).replace(/\n/g,"<br>")}</div>` : ""}
-        <a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer"
-           style="
-             display:inline-block;
-             padding:8px 14px;
-             background:#0d6efd;
-             color:#fff;
-             border-radius:8px;
-             text-decoration:none;
-             font-size:14px;
-             font-weight:500;
-           ">
-          📄 Télécharger le PDF
-        </a>
-      `;
-    } else {
-      d.textContent = text;
-    }
-
-    msgs.appendChild(d);
-    msgs.scrollTop = msgs.scrollHeight;
-  }
-
-  function extractReply(data){
-    // Format n8n courant : [ { output: "..." } ]
-    if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
-      return data[0].output || data[0].reply || data[0].text || "";
-    }
-    if (data && typeof data === "object") {
-      return data.output || data.reply || data.text || "";
-    }
-    if (typeof data === "string") return data;
-    return "";
-  }
+  badge.textContent = "ctx: " + context;
 
   function escapeHtml(s){
     return String(s)
@@ -167,8 +149,44 @@ body{
       .replace(/'/g,"&#39;");
   }
   function escapeAttr(s){
-    // suffisant ici (on échappe au minimum ce qui casse les attributs)
     return String(s).replace(/"/g,"&quot;");
+  }
+
+  // Affichage: si le bot renvoie une URL, on transforme en bouton "Télécharger"
+  function add(text, who){
+    const d = document.createElement("div");
+    d.className = "msg " + who;
+
+    const urlMatch = (text || "").match(/https?:\/\/[^\s]+/);
+
+    if (who === "bot" && urlMatch) {
+      const url = urlMatch[0];
+      const label = (text || "").replace(url, "").trim();
+
+      d.innerHTML = `
+        ${label ? `<div style="margin-bottom:6px">${escapeHtml(label).replace(/\n/g,"<br>")}</div>` : ""}
+        <a class="btnlink" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">
+          📄 Télécharger
+        </a>
+      `;
+    } else {
+      d.textContent = text;
+    }
+
+    msgs.appendChild(d);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  // Extraction de la réponse n8n (gère: [ {output} ], {output}, {reply}, etc.)
+  function extractReply(data){
+    if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
+      return data[0].output || data[0].reply || data[0].text || data[0].answer || data[0].message || "";
+    }
+    if (data && typeof data === "object") {
+      return data.output || data.reply || data.text || data.answer || data.message || "";
+    }
+    if (typeof data === "string") return data;
+    return "";
   }
 
   form.addEventListener("submit", async (e)=>{
@@ -178,8 +196,10 @@ body{
 
     add(q, "user");
     input.value = "";
+
     send.disabled = true;
     typing.style.display = "block";
+    badge.textContent = "Envoi…";
 
     try{
       const res = await fetch(WEBHOOK, {
@@ -188,7 +208,7 @@ body{
         body: JSON.stringify({
           message: q,
           sessionId,
-          // ✅ envoyées à n8n
+          context,
           firstname,
           lastname,
           source: "moodle-iframe",
@@ -196,19 +216,23 @@ body{
         })
       });
 
+      // Si ton webhook ne renvoie pas du JSON, tu peux remplacer par res.text()
       const data = await res.json();
       const reply = extractReply(data);
 
       add(reply || "Aucune réponse reçue.", "bot");
+      badge.textContent = "Prêt";
     } catch(err){
-      add("❌ Erreur de connexion au serveur.", "bot");
       console.error(err);
+      add("❌ Erreur de connexion au serveur.", "bot");
+      badge.textContent = "Erreur";
     } finally {
       typing.style.display = "none";
       send.disabled = false;
       input.focus();
     }
   });
+
 })();
 </script>
 </body>
